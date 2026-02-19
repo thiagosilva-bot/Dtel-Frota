@@ -833,6 +833,45 @@ function handlePhoto(id, input) {
   input.value = '';
 }
 
+// ── FOTOS ABASTECIMENTO ───────────────────────────────────────────
+let abastFotos = [];
+
+function handleAbastFoto(input) {
+  Array.from(input.files).forEach(f => {
+    if (f.size > 8*1024*1024) { showToast('⚠️ Máx 8MB por foto', true); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+      // Comprime a imagem antes de guardar
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX = 1200;
+        let w = img.width, h = img.height;
+        if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+        if (h > MAX) { w = Math.round(w * MAX / h); h = MAX; }
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        abastFotos.push(canvas.toDataURL('image/jpeg', 0.82));
+        renderAbastPrev();
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(f);
+  });
+  input.value = '';
+}
+
+function renderAbastPrev() {
+  const pp = document.getElementById('abast-prev'); if (!pp) return;
+  pp.innerHTML = abastFotos.map((src, i) =>
+    '<div class="pthw">' +
+      '<img class="pth" src="' + src + '" alt="cupom" style="border:1.5px solid rgba(245,197,24,.3)">' +
+      '<button class="prm" onclick="rmAbastFoto(' + i + ')">✕</button>' +
+    '</div>'
+  ).join('');
+  pp.querySelectorAll('.pth').forEach((img, i) => { img.onclick = () => openLB(abastFotos[i]); });
+}
+
 function renderPrev(id) {
   const pp = document.getElementById('pp-' + id); if (!pp) return;
   pp.innerHTML = (clPhotos[id] || []).map((src, i) =>
@@ -842,12 +881,14 @@ function renderPrev(id) {
 }
 
 function rmPhoto(id, i) { clPhotos[id].splice(i, 1); renderPrev(id); }
+function rmAbastFoto(i) { abastFotos.splice(i, 1); renderAbastPrev(); }
 function openLB(src)     { document.getElementById('lbImg').src = src; document.getElementById('lightbox').classList.add('open'); }
 
 // ── TIPO TEMPLATES ────────────────────────────────────────────────
 let tipoAtual = 'vistoria';
 
 function tplAbastecimento() {
+  abastFotos = [];
   return '<div class="card"><div class="slabel">⛽ Abastecimento</div>' +
     '<div class="g3 mf">' +
       '<div class="field"><label>Litros</label><input id="litros" type="number" step="0.01" placeholder="0.00" oninput="calcVlLitro()"></div>' +
@@ -860,6 +901,21 @@ function tplAbastecimento() {
         '<option>Diesel S10</option><option>Diesel Comum</option><option>Etanol</option>' +
       '</select></div>' +
       '<div class="field"><label>Posto</label><input id="posto" type="text" placeholder="Nome do posto"></div>' +
+    '</div>' +
+    // Cupom fiscal photo section
+    '<div class="field" style="margin-top:6px">' +
+      '<label>🧾 Cupom Fiscal (foto)</label>' +
+      '<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;">' +
+        '<label style="display:flex;align-items:center;gap:6px;padding:9px 14px;background:rgba(245,197,24,.1);border:1.5px dashed rgba(245,197,24,.4);border-radius:10px;cursor:pointer;font-size:.82rem;color:var(--gold);font-weight:700;white-space:nowrap">' +
+          '📷 Tirar Foto' +
+          '<input type="file" accept="image/*" capture="environment" onchange="handleAbastFoto(this)" style="display:none">' +
+        '</label>' +
+        '<label style="display:flex;align-items:center;gap:6px;padding:9px 14px;background:rgba(255,255,255,.05);border:1.5px dashed rgba(255,255,255,.2);border-radius:10px;cursor:pointer;font-size:.82rem;color:rgba(255,255,255,.6);font-weight:700;white-space:nowrap">' +
+          '🖼 Galeria' +
+          '<input type="file" accept="image/*" multiple onchange="handleAbastFoto(this)" style="display:none">' +
+        '</label>' +
+      '</div>' +
+      '<div id="abast-prev" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>' +
     '</div>' +
   '</div>';
 }
@@ -1002,7 +1058,10 @@ function coletarDados() {
     const lit = parseFloat(document.getElementById('litros')?.value) || 0;
     const val = parseFloat(document.getElementById('valor')?.value) || 0;
     const vlLit = lit > 0 ? (val / lit).toFixed(3) : '';
-    return {...base, litros: lit||'', valor: val||'', valorPorLitro: vlLit, combustivel: document.getElementById('combustivel')?.value, posto: document.getElementById('posto')?.value};
+    return {...base, litros: lit||'', valor: val||'', valorPorLitro: vlLit,
+      combustivel: document.getElementById('combustivel')?.value,
+      posto: document.getElementById('posto')?.value,
+      cupomFotos: abastFotos.length ? abastFotos : undefined};
   }
   if(tipoAtual==='lavagem'){
     const isGL=CU&&CU.role==='gestor';
@@ -1448,7 +1507,24 @@ function buildDet(r) {
     (r.rota ? '<div class="obs-block">🗺️ Rota: ' + h(r.rota) + '</div>' : '') +
     (r.observacoes ? '<div class="obs-block">📝 ' + h(r.observacoes) + '</div>' : '');
   }
-  const skip = new Set(['tipo','ts','motorista','veiculo','km','dataHora','checklist','fotos','obs_geral']);
+  // Abastecimento — show cupom photos if present
+  if (r.tipo === 'abastecimento') {
+    const skip2 = new Set(['tipo','ts','motorista','veiculo','km','dataHora','cupomFotos']);
+    const labelMap = {litros:'⛽ Litros', valor:'💰 Valor Total (R$)', valorPorLitro:'📊 Valor/Litro (R$)', combustivel:'🔥 Combustível', posto:'📍 Posto'};
+    let html2 = '<div class="dg">' + Object.entries(r).filter(([k]) => !skip2.has(k)).map(([k, v]) => {
+      const lbl = labelMap[k] || k;
+      return '<div class="dit"><div class="dl">' + lbl + '</div><div class="dv">' + h(String(v||'—')) + '</div></div>';
+    }).join('') + '</div>';
+    if (r.cupomFotos && r.cupomFotos.length) {
+      html2 += '<div style="margin-top:10px"><div style="font-size:.72rem;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">🧾 Cupom Fiscal</div>'
+        + '<div class="rphotos">'
+        + r.cupomFotos.map(src => '<img class="rphoto" src="' + src + '" onclick="event.stopPropagation();openLB(this.src)" alt="cupom" style="width:80px;height:80px;border-color:rgba(245,197,24,.3)">').join('')
+        + '</div></div>';
+    }
+    return html2;
+  }
+
+  const skip = new Set(['tipo','ts','motorista','veiculo','km','dataHora','checklist','fotos','obs_geral','cupomFotos']);
   return '<div class="dg">' + Object.entries(r).filter(([k]) => !skip.has(k)).map(([k, v]) =>
     '<div class="dit"><div class="dl">' + k + '</div><div class="dv">' + h(String(v||'—')) + '</div></div>'
   ).join('') + '</div>';
