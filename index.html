@@ -1302,21 +1302,29 @@ function checkAutoSync() {
   const val = S.get('dtel_autosync', false);
   if (el) el.checked = val;
   updateSyncStatus(S.get('dtel_sync_ts', 'nunca'));
-  // Sempre faz pull ao logar se auto-sync ativo
-  if (val) {
-    setTimeout(async () => {
-      setProgress(20, 'Sincronizando...');
-      const ok = await S.pull();
-      if (ok) {
+
+  // Sempre faz pull ao logar (independente do toggle)
+  // O toggle só controla se mostra progresso ou não
+  setTimeout(async () => {
+    if (val) setProgress(20, 'Sincronizando...');
+    const ok = await S.pull();
+    if (ok) {
+      if (val) {
         setProgress(100, 'Sincronizado!');
         updateSyncStatus(S.get('dtel_sync_ts', ''));
-        populateMotSelect(); populateVeicSelect(); populateRelVeic();
-        updateBell(); checkRegAlerts();
-        if (CU?.role === 'gestor') renderAlerts();
         setTimeout(hideProgress, 1500);
-      } else { hideProgress(); }
-    }, 600);
-  }
+      }
+      populateMotSelect(); populateVeicSelect(); populateRelVeic();
+      updateBell(); checkRegAlerts();
+      if (CU?.role === 'gestor') renderAlerts();
+      // Re-renderiza o checklist com itens atualizados da nuvem
+      if (tipoAtual === 'vistoria') {
+        setTipo('vistoria', document.getElementById('tab-vistoria'));
+      }
+    } else {
+      if (val) hideProgress();
+    }
+  }, 600);
 }
 
 
