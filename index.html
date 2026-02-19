@@ -387,10 +387,10 @@ input::placeholder{color:rgba(255,255,255,.26);}
     </div>
     <div class="card">
       <div class="slabel">🔄 Sincronização entre Dispositivos</div>
-      <p class="cfg-note">Sincroniza todos os dados (registros, motoristas, veículos) entre celular e computador via Google Sheets. Requer a URL do webhook configurada acima.</p>
+      <p class="cfg-note">Sincroniza todos os dados entre celular e computador automaticamente via JSONBin.io. Qualquer alteração feita em um dispositivo aparece nos outros em segundos.</p>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
-        <button class="btn-gold" onclick="syncToSheet()" style="flex:1;min-width:140px">📤 Enviar Tudo para Planilha</button>
-        <button class="btn-sec" onclick="syncFromSheet()" style="flex:1;min-width:140px">📥 Baixar da Planilha</button>
+        <button class="btn-gold" onclick="syncToSheet()" style="flex:1;min-width:140px">📤 Enviar Tudo para Nuvem</button>
+        <button class="btn-sec" onclick="syncFromSheet()" style="flex:1;min-width:140px">📥 Baixar da Nuvem</button>
       </div>
       <div id="syncStatus" style="font-size:.78rem;color:rgba(255,255,255,.4);padding:8px 12px;background:rgba(255,255,255,.04);border-radius:10px">
         Última sincronização: <span id="syncTime">nunca</span>
@@ -530,6 +530,38 @@ const LOGO_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAKoAAAB4CAYAAABigGmmAAAdRklEQVR42u19e5
 // Leitura: sempre do localStorage (rápido, funciona offline)
 // Escrita: localStorage + agenda push para o Sheets
 // Pull:    ao login (se autoSync ativo) ou botão manual
+// ── JSONBIN.IO — Sincronização em tempo real ──────────────────────
+const JBIN = {
+  ID:  '69977cd7ae596e708f384128',
+  KEY: '$2a$10$1iLQ1tcQc9ddNvCbbXrSAeKQqf31tvEg05ibDajHx9/w3NphhPhv.',
+  URL: 'https://api.jsonbin.io/v3/b/69977cd7ae596e708f384128',
+  headers() {
+    return {
+      'Content-Type':  'application/json',
+      'X-Master-Key':  this.KEY,
+      'X-Bin-Versioning': 'false',   // sempre sobrescreve — sem versões
+    };
+  },
+  // Baixa o bin completo do JSONBin
+  async fetch() {
+    const r = await fetch(this.URL, { method: 'GET', headers: this.headers() });
+    if (!r.ok) throw new Error('JSONBin GET ' + r.status);
+    const j = await r.json();
+    return j.record || {};           // retorna o objeto salvo
+  },
+  // Salva o bin completo no JSONBin
+  async save(data) {
+    const r = await fetch(this.URL, {
+      method:  'PUT',
+      headers: this.headers(),
+      body:    JSON.stringify(data),
+    });
+    if (!r.ok) throw new Error('JSONBin PUT ' + r.status);
+    return true;
+  },
+};
+
+// ── STORAGE — localStorage como cache + JSONBin como fonte de verdade
 const S = {
   get(k, d) {
     try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : d; }
@@ -537,75 +569,78 @@ const S = {
   },
   set(k, v) {
     localStorage.setItem(k, JSON.stringify(v));
-    // Dados estruturais (não config/webhook) acionam push imediato
+    // Dados de negócio disparam push automático com debounce
     const syncKeys = ['dtel_reg','dtel_lav','dtel_mot','dtel_veic','dtel_maccs',
                       'dtel_master','dtel_cl','dtel_nc_planos','dtel_lav_hist'];
     if (syncKeys.includes(k)) S._schedulePush();
   },
-  // Push com debounce de 2s para não spammar o Sheets
+
+  // ── Push com debounce 2 s ─────────────────────────────────────
   _pushTimer: null,
+  _pushing: false,
   _schedulePush() {
     clearTimeout(S._pushTimer);
-    S._pushTimer = setTimeout(() => S._pushToSheets(), 2000);
+    S._pushTimer = setTimeout(() => S._push(), 2000);
   },
-  async _pushToSheets() {
-    const url = localStorage.getItem('dtel_webhook')
-      ? JSON.parse(localStorage.getItem('dtel_webhook')) : '';
-    if (!url) return; // sem webhook configurado, fica só local
-    const payload = {
-      tipo: 'dtel_sync_full',
-      dtel_reg:        S.get('dtel_reg',        []),
-      dtel_lav:        S.get('dtel_lav',        []),
-      dtel_mot:        S.get('dtel_mot',        []),
-      dtel_veic:       S.get('dtel_veic',       []),
-      dtel_maccs:      S.get('dtel_maccs',      []),
-      dtel_master:     S.get('dtel_master',     {}),
-      dtel_cl:         S.get('dtel_cl',         []),
-      dtel_nc_planos:  S.get('dtel_nc_planos',  {}),
-      dtel_lav_hist:   S.get('dtel_lav_hist',   []),
-      ts: Date.now(),
-      dispositivo: navigator.userAgent.slice(0, 80),
-    };
+  async _push() {
+    if (S._pushing) return;
+    S._pushing = true;
     try {
-      await fetch(url, {
-        method: 'POST', mode: 'no-cors',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify(payload)
-      });
+      const data = S._snapshot();
+      await JBIN.save(data);
       const now = new Date().toLocaleString('pt-BR');
       localStorage.setItem('dtel_sync_ts', JSON.stringify('Auto: ' + now));
       updateSyncStatus('Auto: ' + now);
     } catch(e) { /* silencioso — não interrompe o usuário */ }
+    finally { S._pushing = false; }
   },
-  // Pull: baixa tudo do Sheets e faz merge com o local
+
+  // ── Snapshot de todos os dados para salvar no JSONBin ─────────
+  _snapshot() {
+    return {
+      dtel_reg:       S.get('dtel_reg',       []),
+      dtel_lav:       S.get('dtel_lav',       []),
+      dtel_mot:       S.get('dtel_mot',       []),
+      dtel_veic:      S.get('dtel_veic',      []),
+      dtel_maccs:     S.get('dtel_maccs',     []),
+      dtel_master:    S.get('dtel_master',    {}),
+      dtel_cl:        S.get('dtel_cl',        []),
+      dtel_nc_planos: S.get('dtel_nc_planos', {}),
+      dtel_lav_hist:  S.get('dtel_lav_hist',  []),
+      _ts: Date.now(),
+    };
+  },
+
+  // ── Pull: baixa do JSONBin e aplica localmente ─────────────────
   async pull() {
-    const url = S.get('dtel_webhook', '');
-    if (!url) return false;
     try {
-      const resp = await fetch(url + '?action=getData', {method:'GET', mode:'cors'});
-      if (!resp.ok) return false;
-      const data = await resp.json();
-      if (data.status !== 'ok' || !data.payload) return false;
-      const p = data.payload;
+      const p = await JBIN.fetch();
+      if (!p || !p._ts) return false;   // bin vazio / sem dados reais
+
       const mergeArr = (local, remote, key='ts') => {
         const map = {};
         (local  || []).forEach(i => { if (i[key] != null) map[i[key]] = i; });
         (remote || []).forEach(i => { if (i[key] != null) map[i[key]] = i; });
-        return Object.values(map).sort((a,b) => (b[key]||0)-(a[key]||0));
+        return Object.values(map).sort((a,b) => (b[key]||0) - (a[key]||0));
       };
-      if (p.dtel_reg)       localStorage.setItem('dtel_reg',       JSON.stringify(mergeArr(S.get('dtel_reg',[]),       p.dtel_reg)));
-      if (p.dtel_lav)       localStorage.setItem('dtel_lav',       JSON.stringify(mergeArr(S.get('dtel_lav',[]),       p.dtel_lav,'id')));
+
+      // Arrays: merge (mantém itens de ambos os lados)
+      if (p.dtel_reg)       localStorage.setItem('dtel_reg',       JSON.stringify(mergeArr(S.get('dtel_reg',[]),   p.dtel_reg)));
+      if (p.dtel_lav)       localStorage.setItem('dtel_lav',       JSON.stringify(mergeArr(S.get('dtel_lav',[]),   p.dtel_lav,'id')));
+      // Cadastros: remote sempre vence (gestor é quem mantém)
       if (p.dtel_mot)       localStorage.setItem('dtel_mot',       JSON.stringify(p.dtel_mot));
       if (p.dtel_veic)      localStorage.setItem('dtel_veic',      JSON.stringify(p.dtel_veic));
       if (p.dtel_maccs)     localStorage.setItem('dtel_maccs',     JSON.stringify(p.dtel_maccs));
       if (p.dtel_master)    localStorage.setItem('dtel_master',    JSON.stringify(p.dtel_master));
       if (p.dtel_cl)        localStorage.setItem('dtel_cl',        JSON.stringify(p.dtel_cl));
+      // Planos: merge de objetos
       if (p.dtel_nc_planos) localStorage.setItem('dtel_nc_planos', JSON.stringify({...S.get('dtel_nc_planos',{}), ...p.dtel_nc_planos}));
+
       const now = new Date().toLocaleString('pt-BR');
       localStorage.setItem('dtel_sync_ts', JSON.stringify('Sync: ' + now));
       return true;
     } catch(e) { return false; }
-  }
+  },
 };
 
 // ── CHECKLIST PADRÃO (46 itens) ──────────────────────────────────
@@ -1173,16 +1208,16 @@ function updateSyncStatus(msg) {
 
 // ── SYNC: Envia TODOS os dados locais para a planilha ─────────────
 async function syncToSheet() {
-  const url = S.get('dtel_webhook','');
-  if (!url) { showToast('⚠️ Configure a URL do webhook primeiro!', true); return; }
-  showToast('📤 Enviando dados...');
-  setProgress(20, 'Sincronizando...');
+  showToast('📤 Enviando para JSONBin...');
+  setProgress(20, 'Enviando...');
   try {
-    await S._pushToSheets();
+    await JBIN.save(S._snapshot());
     setProgress(100, 'Enviado!');
-    updateSyncStatus(S.get('dtel_sync_ts',''));
+    const now = new Date().toLocaleString('pt-BR');
+    localStorage.setItem('dtel_sync_ts', JSON.stringify('Enviado: ' + now));
+    updateSyncStatus('Enviado: ' + now);
     setTimeout(hideProgress, 1500);
-    showToast('✅ Dados enviados para a planilha!');
+    showToast('✅ Dados enviados ao JSONBin!');
   } catch(e) {
     hideProgress();
     showToast('❌ Erro: ' + e.message, true);
@@ -1191,22 +1226,20 @@ async function syncToSheet() {
 
 // ── SYNC: Baixa dados da planilha ────────────────────────────────
 async function syncFromSheet() {
-  const url = S.get('dtel_webhook','');
-  if (!url) { showToast('⚠️ Configure a URL do webhook primeiro!', true); return; }
-  showToast('📥 Baixando dados...');
+  showToast('📥 Baixando do JSONBin...');
   setProgress(20, 'Buscando...');
   const ok = await S.pull();
   if (ok) {
     setProgress(100, 'Sincronizado!');
-    updateSyncStatus(S.get('dtel_sync_ts',''));
+    updateSyncStatus(S.get('dtel_sync_ts', ''));
     setTimeout(hideProgress, 1500);
-    showToast('✅ Dados sincronizados com sucesso!');
+    showToast('✅ Dados sincronizados!');
     populateMotSelect(); populateVeicSelect(); populateRelVeic();
     updateBell(); checkRegAlerts();
     if (CU?.role === 'gestor') renderAlerts();
   } else {
     hideProgress();
-    showToast('⚠️ Não foi possível baixar. Verifique a URL e tente novamente.', true);
+    showToast('⚠️ Nada para sincronizar ainda ou erro de conexão.', true);
   }
 }
 
@@ -1216,19 +1249,20 @@ function checkAutoSync() {
   const val = S.get('dtel_autosync', false);
   if (el) el.checked = val;
   updateSyncStatus(S.get('dtel_sync_ts', 'nunca'));
-  if (val && S.get('dtel_webhook','')) {
+  // Sempre faz pull ao logar se auto-sync ativo
+  if (val) {
     setTimeout(async () => {
       setProgress(20, 'Sincronizando...');
       const ok = await S.pull();
       if (ok) {
         setProgress(100, 'Sincronizado!');
-        updateSyncStatus(S.get('dtel_sync_ts',''));
+        updateSyncStatus(S.get('dtel_sync_ts', ''));
         populateMotSelect(); populateVeicSelect(); populateRelVeic();
         updateBell(); checkRegAlerts();
         if (CU?.role === 'gestor') renderAlerts();
         setTimeout(hideProgress, 1500);
       } else { hideProgress(); }
-    }, 800);
+    }, 600);
   }
 }
 
