@@ -697,13 +697,36 @@ function getCL()  { const s = S.get('dtel_cl', null); return s || CL_DEFAULT; }
 function saveCL(a){ S.set('dtel_cl', a); }
 
 // ── INIT ─────────────────────────────────────────────────────────
-function initDefaults() {
-  if (!S.get('dtel_master', null)) S.set('dtel_master', {login:'admin', pass:'admin123'});
-  if (!S.get('dtel_maccs',  null)) S.set('dtel_maccs',  []);
-  if (!S.get('dtel_mot',    null)) S.set('dtel_mot',    []);
-  if (!S.get('dtel_veic',   null)) S.set('dtel_veic',   []);
-  if (!S.get('dtel_reg',    null)) S.set('dtel_reg',    []);
-  if (!S.get('dtel_webhook',null)) S.set('dtel_webhook','');
+async function initDefaults() {
+  // Primeiro tenta baixar do JSONBin
+  // Se tiver dados reais lá, usa eles — não sobrescreve com padrões
+  let temDadosNuvem = false;
+  try {
+    const remoto = await JBIN.fetch();
+    if (remoto && remoto._ts) {
+      // JSONBin tem dados — aplica tudo localmente
+      if (remoto.dtel_master)    localStorage.setItem('dtel_master',    JSON.stringify(remoto.dtel_master));
+      if (remoto.dtel_maccs)     localStorage.setItem('dtel_maccs',     JSON.stringify(remoto.dtel_maccs));
+      if (remoto.dtel_mot)       localStorage.setItem('dtel_mot',       JSON.stringify(remoto.dtel_mot));
+      if (remoto.dtel_veic)      localStorage.setItem('dtel_veic',      JSON.stringify(remoto.dtel_veic));
+      if (remoto.dtel_reg)       localStorage.setItem('dtel_reg',       JSON.stringify(remoto.dtel_reg));
+      if (remoto.dtel_lav)       localStorage.setItem('dtel_lav',       JSON.stringify(remoto.dtel_lav));
+      if (remoto.dtel_cl)        localStorage.setItem('dtel_cl',        JSON.stringify(remoto.dtel_cl));
+      if (remoto.dtel_nc_planos) localStorage.setItem('dtel_nc_planos', JSON.stringify(remoto.dtel_nc_planos));
+      temDadosNuvem = true;
+    }
+  } catch(e) { /* sem conexão — usa localStorage */ }
+
+  // Só define padrões se não tiver nada local E nem na nuvem
+  if (!temDadosNuvem) {
+    if (!S.get('dtel_master', null))    localStorage.setItem('dtel_master',    JSON.stringify({login:'admin', pass:'admin123'}));
+    if (!S.get('dtel_maccs',  null))    localStorage.setItem('dtel_maccs',     JSON.stringify([]));
+    if (!S.get('dtel_mot',    null))    localStorage.setItem('dtel_mot',       JSON.stringify([]));
+    if (!S.get('dtel_veic',   null))    localStorage.setItem('dtel_veic',      JSON.stringify([]));
+    if (!S.get('dtel_reg',    null))    localStorage.setItem('dtel_reg',       JSON.stringify([]));
+    if (!S.get('dtel_nc_planos', null)) localStorage.setItem('dtel_nc_planos', JSON.stringify({}));
+  }
+
   const src = 'data:image/png;base64,' + LOGO_B64;
   document.getElementById('loginLogoImg').src  = src;
   document.getElementById('topbarLogoImg').src = src;
@@ -712,9 +735,18 @@ function initDefaults() {
 // ── AUTH ─────────────────────────────────────────────────────────
 let CU = null;
 
-function doLogin() {
+async function doLogin() {
   const login = document.getElementById('loginUser').value.trim().toLowerCase().replace(/\s+/g,'');
   const pass  = document.getElementById('loginPass').value.trim();
+  const btn   = document.querySelector('.btn-login');
+
+  // 1. Sincroniza com JSONBin ANTES de validar — garante dados atualizados
+  btn.textContent = '⏳ Sincronizando...'; btn.disabled = true;
+  document.getElementById('loginError').textContent = '';
+  try { await S.pull(); } catch(e) { /* continua com dados locais se falhar */ }
+  btn.textContent = '🔐 ENTRAR'; btn.disabled = false;
+
+  // 2. Valida com os dados já atualizados do localStorage
   const master = S.get('dtel_master', {});
   let user = null;
   const mLogin = (master.login||'').trim().toLowerCase();
@@ -1945,7 +1977,18 @@ function respLavEl(el, aprovar){
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────
-initDefaults();
+(async () => {
+  // Mostra loading enquanto busca dados da nuvem
+  const loginBtn = document.querySelector('.btn-login');
+  if (loginBtn) { loginBtn.textContent = '⏳ Carregando...'; loginBtn.disabled = true; }
+  const loginErr = document.getElementById('loginError');
+  if (loginErr) loginErr.textContent = '🔄 Sincronizando com a nuvem...';
+
+  await initDefaults();
+
+  if (loginBtn) { loginBtn.textContent = '🔐 ENTRAR'; loginBtn.disabled = false; }
+  if (loginErr) loginErr.textContent = '';
+})();
 </script>
 </body>
 </html>
