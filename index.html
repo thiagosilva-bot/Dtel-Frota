@@ -264,6 +264,7 @@ input::placeholder{color:rgba(255,255,255,.26);}
   <div class="nav-tab htab"  id="nt-veic" onclick="showPage('veiculos',this)">🚗 Veículos</div>
   <div class="nav-tab htab"  id="nt-mot"  onclick="showPage('motoristas',this)">👤 Motoristas</div>
   <div class="nav-tab htab"  id="nt-alt"  onclick="showPage('alertas',this)">🔔 Alertas CNH</div>
+  <div class="nav-tab htab"  id="nt-rel"  onclick="showPage('relatorio',this)">📊 Relatórios</div>
   <div class="nav-tab htab"  id="nt-cfg"  onclick="showPage('config',this)">⚙️ Config</div>
 </div>
 
@@ -356,6 +357,23 @@ input::placeholder{color:rgba(255,255,255,.26);}
     <div id="alertsContent"></div>
   </div>
 
+  <!-- RELATÓRIOS -->
+  <div class="page" id="page-relatorio">
+    <div class="ph"><div class="pt">📊 <span>RELATÓRIOS DE KM</span></div></div>
+    <div class="filter-bar" id="relFiltros">
+      <select id="relVeic" onchange="renderRelatorio()">
+        <option value="">Todos os veículos</option>
+      </select>
+      <select id="relPer" onchange="renderRelatorio()">
+        <option value="mes">Mês atual</option>
+        <option value="semana">Esta semana</option>
+        <option value="hoje">Hoje</option>
+        <option value="tudo">Tudo</option>
+      </select>
+    </div>
+    <div id="relContent"></div>
+  </div>
+
   <!-- CONFIG -->
   <div class="page" id="page-config">
     <div class="ph"><div class="pt">⚙️ <span>CONFIGURAÇÕES</span></div></div>
@@ -367,6 +385,22 @@ input::placeholder{color:rgba(255,255,255,.26);}
         <input id="webhookUrl" type="url" placeholder="https://script.google.com/macros/s/..." oninput="saveWebhook()">
       </div>
     </div>
+    <div class="card">
+      <div class="slabel">🔄 Sincronização entre Dispositivos</div>
+      <p class="cfg-note">Sincroniza todos os dados (registros, motoristas, veículos) entre celular e computador via Google Sheets. Requer a URL do webhook configurada acima.</p>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn-gold" onclick="syncToSheet()" style="flex:1;min-width:140px">📤 Enviar Tudo para Planilha</button>
+        <button class="btn-sec" onclick="syncFromSheet()" style="flex:1;min-width:140px">📥 Baixar da Planilha</button>
+      </div>
+      <div id="syncStatus" style="font-size:.78rem;color:rgba(255,255,255,.4);padding:8px 12px;background:rgba(255,255,255,.04);border-radius:10px">
+        Última sincronização: <span id="syncTime">nunca</span>
+      </div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="autoSync" onchange="saveAutoSync()" style="width:16px;height:16px;cursor:pointer">
+        <label for="autoSync" style="font-size:.82rem;color:rgba(255,255,255,.6);cursor:pointer">Sincronizar automaticamente ao fazer login</label>
+      </div>
+    </div>
+
     <div class="card">
       <div class="slabel">🔑 Senha do Gestor</div>
       <p class="cfg-note">Conta master: <strong>admin</strong>. Altere a senha abaixo.</p>
@@ -492,9 +526,86 @@ input::placeholder{color:rgba(255,255,255,.26);}
 const LOGO_B64 = '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';
 
 // ── STORAGE ──────────────────────────────────────────────────────
+// ── STORAGE com Sincronização Google Sheets ───────────────────────
+// Leitura: sempre do localStorage (rápido, funciona offline)
+// Escrita: localStorage + agenda push para o Sheets
+// Pull:    ao login (se autoSync ativo) ou botão manual
 const S = {
-  get: (k, d) => { try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : d; } catch(e) { return d; } },
-  set: (k, v) => localStorage.setItem(k, JSON.stringify(v))
+  get(k, d) {
+    try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : d; }
+    catch(e) { return d; }
+  },
+  set(k, v) {
+    localStorage.setItem(k, JSON.stringify(v));
+    // Dados estruturais (não config/webhook) acionam push imediato
+    const syncKeys = ['dtel_reg','dtel_lav','dtel_mot','dtel_veic','dtel_maccs',
+                      'dtel_master','dtel_cl','dtel_nc_planos','dtel_lav_hist'];
+    if (syncKeys.includes(k)) S._schedulePush();
+  },
+  // Push com debounce de 2s para não spammar o Sheets
+  _pushTimer: null,
+  _schedulePush() {
+    clearTimeout(S._pushTimer);
+    S._pushTimer = setTimeout(() => S._pushToSheets(), 2000);
+  },
+  async _pushToSheets() {
+    const url = localStorage.getItem('dtel_webhook')
+      ? JSON.parse(localStorage.getItem('dtel_webhook')) : '';
+    if (!url) return; // sem webhook configurado, fica só local
+    const payload = {
+      tipo: 'dtel_sync_full',
+      dtel_reg:        S.get('dtel_reg',        []),
+      dtel_lav:        S.get('dtel_lav',        []),
+      dtel_mot:        S.get('dtel_mot',        []),
+      dtel_veic:       S.get('dtel_veic',       []),
+      dtel_maccs:      S.get('dtel_maccs',      []),
+      dtel_master:     S.get('dtel_master',     {}),
+      dtel_cl:         S.get('dtel_cl',         []),
+      dtel_nc_planos:  S.get('dtel_nc_planos',  {}),
+      dtel_lav_hist:   S.get('dtel_lav_hist',   []),
+      ts: Date.now(),
+      dispositivo: navigator.userAgent.slice(0, 80),
+    };
+    try {
+      await fetch(url, {
+        method: 'POST', mode: 'no-cors',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const now = new Date().toLocaleString('pt-BR');
+      localStorage.setItem('dtel_sync_ts', JSON.stringify('Auto: ' + now));
+      updateSyncStatus('Auto: ' + now);
+    } catch(e) { /* silencioso — não interrompe o usuário */ }
+  },
+  // Pull: baixa tudo do Sheets e faz merge com o local
+  async pull() {
+    const url = S.get('dtel_webhook', '');
+    if (!url) return false;
+    try {
+      const resp = await fetch(url + '?action=getData', {method:'GET', mode:'cors'});
+      if (!resp.ok) return false;
+      const data = await resp.json();
+      if (data.status !== 'ok' || !data.payload) return false;
+      const p = data.payload;
+      const mergeArr = (local, remote, key='ts') => {
+        const map = {};
+        (local  || []).forEach(i => { if (i[key] != null) map[i[key]] = i; });
+        (remote || []).forEach(i => { if (i[key] != null) map[i[key]] = i; });
+        return Object.values(map).sort((a,b) => (b[key]||0)-(a[key]||0));
+      };
+      if (p.dtel_reg)       localStorage.setItem('dtel_reg',       JSON.stringify(mergeArr(S.get('dtel_reg',[]),       p.dtel_reg)));
+      if (p.dtel_lav)       localStorage.setItem('dtel_lav',       JSON.stringify(mergeArr(S.get('dtel_lav',[]),       p.dtel_lav,'id')));
+      if (p.dtel_mot)       localStorage.setItem('dtel_mot',       JSON.stringify(p.dtel_mot));
+      if (p.dtel_veic)      localStorage.setItem('dtel_veic',      JSON.stringify(p.dtel_veic));
+      if (p.dtel_maccs)     localStorage.setItem('dtel_maccs',     JSON.stringify(p.dtel_maccs));
+      if (p.dtel_master)    localStorage.setItem('dtel_master',    JSON.stringify(p.dtel_master));
+      if (p.dtel_cl)        localStorage.setItem('dtel_cl',        JSON.stringify(p.dtel_cl));
+      if (p.dtel_nc_planos) localStorage.setItem('dtel_nc_planos', JSON.stringify({...S.get('dtel_nc_planos',{}), ...p.dtel_nc_planos}));
+      const now = new Date().toLocaleString('pt-BR');
+      localStorage.setItem('dtel_sync_ts', JSON.stringify('Sync: ' + now));
+      return true;
+    } catch(e) { return false; }
+  }
 };
 
 // ── CHECKLIST PADRÃO (46 itens) ──────────────────────────────────
@@ -604,15 +715,16 @@ function launchApp() {
   document.getElementById('uRoleBadge').textContent = isG ? 'Gestor' : 'Motorista';
   document.getElementById('uRoleBadge').className   = 'urole ' + (isG ? 'role-g' : 'role-m');
   document.getElementById('uNameDisp').textContent  = CU.nome;
-  ['nt-veic','nt-mot','nt-alt','nt-cfg'].forEach(id =>
-    document.getElementById(id).classList.toggle('htab', !isG)
-  );
+  ['nt-veic','nt-mot','nt-alt','nt-rel','nt-cfg'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.classList.toggle('htab', !isG);
+  });
   document.getElementById('bellBtn').style.display = isG ? 'flex' : 'none';
   document.getElementById('webhookUrl').value = S.get('dtel_webhook','') || '';
   const now = new Date(); now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
   document.getElementById('dataHora').value = now.toISOString().slice(0,16);
   populateMotSelect();
   populateVeicSelect();
+  populateRelVeic();
   if (!isG && CU.motNome) {
     const s = document.getElementById('motorista');
     s.value = CU.motNome; s.disabled = true;
@@ -621,6 +733,7 @@ function launchApp() {
   setTipo('vistoria', document.getElementById('tab-vistoria'));
   updateBell();
   checkRegAlerts();
+  checkAutoSync();
   showPage('registro', document.getElementById('nt-reg'));
 }
 
@@ -635,6 +748,7 @@ function showPage(name, el) {
   if (name === 'alertas')       renderAlerts();
   if (name === 'historico')     renderHist();
   if (name === 'config')        renderClEditor();
+  if (name === 'relatorio')   { populateRelVeic(); renderRelatorio(); }
   if (name === 'registro')    { populateMotSelect(); populateVeicSelect(); checkRegAlerts(); applyTipoPermissions(); }
 }
 
@@ -736,14 +850,17 @@ let tipoAtual = 'vistoria';
 function tplAbastecimento() {
   return '<div class="card"><div class="slabel">⛽ Abastecimento</div>' +
     '<div class="g3 mf">' +
-      '<div class="field"><label>Litros</label><input id="litros" type="number" step="0.01" placeholder="0.00"></div>' +
-      '<div class="field"><label>Valor Total (R$)</label><input id="valor" type="number" step="0.01" placeholder="0.00"></div>' +
+      '<div class="field"><label>Litros</label><input id="litros" type="number" step="0.01" placeholder="0.00" oninput="calcVlLitro()"></div>' +
+      '<div class="field"><label>Valor Total (R$)</label><input id="valor" type="number" step="0.01" placeholder="0.00" oninput="calcVlLitro()"></div>' +
+      '<div class="field"><label>Valor por Litro (R$)</label><input id="vlLitro" type="number" step="0.001" placeholder="Calc. automático" readonly style="opacity:.7"></div>' +
+    '</div>' +
+    '<div class="g2 mf">' +
       '<div class="field"><label>Combustível</label><select id="combustivel">' +
         '<option>Gasolina Comum</option><option>Gasolina Aditivada</option>' +
         '<option>Diesel S10</option><option>Diesel Comum</option><option>Etanol</option>' +
       '</select></div>' +
+      '<div class="field"><label>Posto</label><input id="posto" type="text" placeholder="Nome do posto"></div>' +
     '</div>' +
-    '<div class="field"><label>Posto</label><input id="posto" type="text" placeholder="Nome do posto"></div>' +
   '</div>';
 }
 
@@ -790,21 +907,43 @@ function tplManutencao() {
 }
 
 function tplJornada() {
-  return '<div class="card"><div class="slabel">🕐 Jornada de Trabalho</div>' +
-    '<div style="background:linear-gradient(135deg,rgba(139,92,246,.1),rgba(139,92,246,.04));border:1.5px solid rgba(139,92,246,.3);border-radius:12px;padding:12px 14px;margin-bottom:14px;">' +
-      '<div style="font-size:.78rem;font-weight:800;color:#a78bfa;letter-spacing:1px;margin-bottom:4px;">📌 INSTRUÇÕES</div>' +
-      '<div style="font-size:.79rem;color:rgba(255,255,255,.65);line-height:1.5;">Registre o KM de saída e retorno do dia. Preencha ao sair e ao chegar.</div>' +
+  // Check if motorista has an open jornada (saida registered but no chegada)
+  const isG = CU && CU.role === 'gestor';
+  const motNome = CU && CU.motNome;
+  const regs = S.get('dtel_reg', []);
+  const aberta = !isG && regs.find(r => r.tipo === 'jornada_entrada' && r.motorista === motNome && !r.fechada);
+
+  if (aberta) {
+    // Show SAÍDA form — jornada in progress
+    const dataAberta = aberta.dataHora ? aberta.dataHora.replace('T',' ') : '—';
+    return '<div class="card"><div class="slabel">🕐 Jornada — REGISTRAR CHEGADA</div>' +
+      '<div style="background:linear-gradient(135deg,rgba(34,197,94,.12),rgba(34,197,94,.04));border:1.5px solid rgba(34,197,94,.4);border-radius:12px;padding:12px 14px;margin-bottom:14px">' +
+        '<div style="font-size:.78rem;font-weight:800;color:#4ade80;letter-spacing:1px;margin-bottom:4px">🟢 JORNADA EM ANDAMENTO</div>' +
+        '<div style="font-size:.79rem;color:rgba(255,255,255,.7)">Saída registrada em: ' + dataAberta + '</div>' +
+        '<div style="font-size:.79rem;color:rgba(255,255,255,.55);margin-top:3px">KM saída: ' + (aberta.kmInicial||'—') + ' · Rota: ' + h(aberta.rota||'—') + '</div>' +
+      '</div>' +
+      '<div class="g2 mf">' +
+        '<div class="field"><label>⏹ Hora de Chegada</label><input id="j_chegada" type="time"></div>' +
+        '<div class="field"><label>🏁 KM Final</label><input id="j_km_fin" type="number" placeholder="000000"></div>' +
+      '</div>' +
+      '<div class="field mf"><label>Rota / Destino</label><input id="j_rota" type="text" value="' + h(aberta.rota||'') + '" placeholder="Ex: Caruaru / Recife..."></div>' +
+      '<div class="field"><label>Observações de Chegada</label><textarea id="j_obs" rows="2" placeholder="Ocorrências, paradas, etc..." style="resize:vertical"></textarea></div>' +
+      '<input type="hidden" id="j_entrada_id" value="' + aberta.ts + '">' +
+    '</div>';
+  }
+
+  // No open jornada — show ENTRADA form
+  return '<div class="card"><div class="slabel">🕐 Jornada — REGISTRAR SAÍDA</div>' +
+    '<div style="background:linear-gradient(135deg,rgba(139,92,246,.1),rgba(139,92,246,.04));border:1.5px solid rgba(139,92,246,.3);border-radius:12px;padding:12px 14px;margin-bottom:14px">' +
+      '<div style="font-size:.78rem;font-weight:800;color:#a78bfa;letter-spacing:1px;margin-bottom:4px">📌 INÍCIO DE JORNADA</div>' +
+      '<div style="font-size:.79rem;color:rgba(255,255,255,.65);line-height:1.5">Registre a saída agora. Ao chegar, abra este formulário novamente para registrar a chegada.</div>' +
     '</div>' +
     '<div class="g2 mf">' +
       '<div class="field"><label>⏱ Hora de Saída</label><input id="j_saida" type="time"></div>' +
       '<div class="field"><label>🏁 KM Inicial</label><input id="j_km_ini" type="number" placeholder="000000"></div>' +
     '</div>' +
-    '<div class="g2 mf">' +
-      '<div class="field"><label>⏹ Hora de Chegada</label><input id="j_chegada" type="time"></div>' +
-      '<div class="field"><label>🏁 KM Final</label><input id="j_km_fin" type="number" placeholder="000000"></div>' +
-    '</div>' +
     '<div class="field mf"><label>Destino / Rota</label><input id="j_rota" type="text" placeholder="Ex: Caruaru / Recife / Visitas técnicas..."></div>' +
-    '<div class="field"><label>Observações</label><textarea id="j_obs" rows="2" placeholder="Ocorrências, paradas, etc..." style="resize:vertical"></textarea></div>' +
+    '<div class="field"><label>Observações de Saída</label><textarea id="j_obs" rows="2" placeholder="Ocorrências, paradas, etc..." style="resize:vertical"></textarea></div>' +
   '</div>';
 }
 
@@ -859,8 +998,12 @@ function coletarDados() {
     });
     return {...base, checklist, fotos, obs_geral: document.getElementById('obs_geral')?.value || ''};
   }
-  if (tipoAtual === 'abastecimento')
-    return {...base, litros: document.getElementById('litros')?.value, valor: document.getElementById('valor')?.value, combustivel: document.getElementById('combustivel')?.value, posto: document.getElementById('posto')?.value};
+  if (tipoAtual === 'abastecimento') {
+    const lit = parseFloat(document.getElementById('litros')?.value) || 0;
+    const val = parseFloat(document.getElementById('valor')?.value) || 0;
+    const vlLit = lit > 0 ? (val / lit).toFixed(3) : '';
+    return {...base, litros: lit||'', valor: val||'', valorPorLitro: vlLit, combustivel: document.getElementById('combustivel')?.value, posto: document.getElementById('posto')?.value};
+  }
   if(tipoAtual==='lavagem'){
     const isGL=CU&&CU.role==='gestor';
     if(!isGL){
@@ -871,37 +1014,62 @@ function coletarDados() {
   if (tipoAtual === 'manutencao')
     return {...base, tipoManutencao: document.getElementById('tipoMan')?.value, valor: document.getElementById('valorMan')?.value, oficina: document.getElementById('oficina')?.value, proximaRevisaoKm: document.getElementById('proxRev')?.value, descricao: document.getElementById('descricao')?.value};
   if (tipoAtual === 'jornada') {
-    const kmIni = Number(document.getElementById('j_km_ini')?.value || 0);
-    const kmFin = Number(document.getElementById('j_km_fin')?.value || 0);
-    return {...base, horaSaida: document.getElementById('j_saida')?.value, horaChegada: document.getElementById('j_chegada')?.value, kmInicial: kmIni, kmFinal: kmFin, kmPercorrido: kmFin > 0 && kmIni > 0 ? kmFin - kmIni : null, rota: document.getElementById('j_rota')?.value, observacoes: document.getElementById('j_obs')?.value};
+    const entradaId = document.getElementById('j_entrada_id')?.value;
+    if (entradaId) {
+      // CHEGADA — close the open jornada
+      const kmFin = Number(document.getElementById('j_km_fin')?.value || 0);
+      const regs2 = S.get('dtel_reg', []);
+      const entrada = regs2.find(r => r.ts == entradaId);
+      const kmIni = entrada ? Number(entrada.kmInicial || 0) : 0;
+      return {...base, tipo:'jornada_chegada', entradaRef: Number(entradaId),
+        horaChegada: document.getElementById('j_chegada')?.value,
+        kmFinal: kmFin, kmPercorrido: kmFin > 0 && kmIni > 0 ? kmFin - kmIni : null,
+        kmInicial: kmIni, horaSaida: entrada?.horaSaida,
+        rota: document.getElementById('j_rota')?.value,
+        observacoes: document.getElementById('j_obs')?.value};
+    }
+    // SAÍDA — new jornada entrada
+    return {...base, tipo:'jornada_entrada',
+      horaSaida: document.getElementById('j_saida')?.value,
+      kmInicial: Number(document.getElementById('j_km_ini')?.value || 0),
+      rota: document.getElementById('j_rota')?.value,
+      observacoes: document.getElementById('j_obs')?.value,
+      fechada: false};
   }
   return base;
 }
 
 async function enviar() {
-  const url   = S.get('dtel_webhook','') || document.getElementById('webhookUrl').value.trim();
   const dados = coletarDados();
   if (!dados.motorista || !dados.veiculo) { showToast('⚠️ Preencha motorista e veículo!', true); return; }
-  if(dados.tipo==='lavagem_sol'){
-    const lav=S.get('dtel_lav',[]);
-    lav.unshift({...dados,id:'lav_'+Date.now()});
-    S.set('dtel_lav',lav);
-    updateBell();checkRegAlerts();
+
+  if (dados.tipo === 'lavagem_sol') {
+    const lav = S.get('dtel_lav', []);
+    lav.unshift({...dados, id: 'lav_' + Date.now()});
+    S.set('dtel_lav', lav); // S.set já sincroniza automaticamente
+    updateBell(); checkRegAlerts();
     showToast('✅ Solicitação enviada ao gestor!');
-    resetFormAfterSend();return;
+    resetFormAfterSend(); return;
   }
-  const regs = S.get('dtel_reg', []); regs.unshift(dados); S.set('dtel_reg', regs);
+
+  // Jornada chegada: fecha a entrada aberta
+  if (dados.tipo === 'jornada_chegada') {
+    const regs2 = S.get('dtel_reg', []);
+    const ix = regs2.findIndex(r => r.ts == dados.entradaRef);
+    if (ix >= 0) regs2[ix].fechada = true;
+    S.set('dtel_reg', regs2);
+  }
+
+  const regs = S.get('dtel_reg', []);
+  regs.unshift(dados);
+  S.set('dtel_reg', regs); // S.set agenda push automático para o Sheets em 2s
+
   const btn = document.getElementById('btnEnviar');
-  btn.textContent = '⏳ ENVIANDO...'; btn.disabled = true;
-  if (url) {
-    try {
-      setProgress(30, 'Enviando...');
-      await fetch(url, {method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body:JSON.stringify(dados)});
-      setProgress(100, 'Enviado!');
-      setTimeout(() => hideProgress(), 1500);
-    } catch(e) { hideProgress(); }
-  } else { hideProgress(); }
-  showToast('✅ Registro salvo!');
+  btn.textContent = '⏳ SALVANDO...'; btn.disabled = true;
+  setProgress(60, 'Salvando...');
+  setTimeout(() => { setProgress(100, 'Salvo!'); setTimeout(hideProgress, 1000); }, 300);
+
+  showToast('✅ Registro salvo' + (S.get('dtel_webhook','') ? ' e sincronizando...' : '!'));
   btn.innerHTML = '🚀 ENVIAR REGISTRO'; btn.disabled = false;
   updateBell(); resetFormAfterSend();
 }
@@ -911,7 +1079,12 @@ function resetFormAfterSend(){
   document.getElementById('km').value = '';
   if (CU.role !== 'motorista') document.getElementById('motorista').value = '';
   document.getElementById('veiculo').value = '';
-  setTipo('vistoria', document.getElementById('tab-vistoria'));
+  // If last action was jornada entrada, re-render jornada tab to show chegada form
+  if (tipoAtual === 'jornada' || tipoAtual === 'jornada_entrada') {
+    setTipo('jornada', document.getElementById('tab-jornada'));
+  } else {
+    setTipo('vistoria', document.getElementById('tab-vistoria'));
+  }
 }
 
 function setProgress(pct, label) {
@@ -923,9 +1096,84 @@ function hideProgress() {
   document.getElementById('uploadProgress').classList.remove('show');
   document.getElementById('progFill').style.width = '0%';
 }
-function saveWebhook() { S.set('dtel_webhook', document.getElementById('webhookUrl').value.trim()); }
+function saveWebhook() {
+  const val = document.getElementById('webhookUrl').value.trim();
+  localStorage.setItem('dtel_webhook', JSON.stringify(val));
+}
+function saveAutoSync() {
+  const val = document.getElementById('autoSync')?.checked || false;
+  localStorage.setItem('dtel_autosync', JSON.stringify(val));
+}
 
-// ── VEÍCULOS ──────────────────────────────────────────────────────
+function updateSyncStatus(msg) {
+  const el = document.getElementById('syncTime');
+  if (el) el.textContent = msg || 'nunca';
+  // Use localStorage directly (not S.set) to avoid triggering another push
+  localStorage.setItem('dtel_sync_ts', JSON.stringify(msg || 'nunca'));
+}
+
+// ── SYNC: Envia TODOS os dados locais para a planilha ─────────────
+async function syncToSheet() {
+  const url = S.get('dtel_webhook','');
+  if (!url) { showToast('⚠️ Configure a URL do webhook primeiro!', true); return; }
+  showToast('📤 Enviando dados...');
+  setProgress(20, 'Sincronizando...');
+  try {
+    await S._pushToSheets();
+    setProgress(100, 'Enviado!');
+    updateSyncStatus(S.get('dtel_sync_ts',''));
+    setTimeout(hideProgress, 1500);
+    showToast('✅ Dados enviados para a planilha!');
+  } catch(e) {
+    hideProgress();
+    showToast('❌ Erro: ' + e.message, true);
+  }
+}
+
+// ── SYNC: Baixa dados da planilha ────────────────────────────────
+async function syncFromSheet() {
+  const url = S.get('dtel_webhook','');
+  if (!url) { showToast('⚠️ Configure a URL do webhook primeiro!', true); return; }
+  showToast('📥 Baixando dados...');
+  setProgress(20, 'Buscando...');
+  const ok = await S.pull();
+  if (ok) {
+    setProgress(100, 'Sincronizado!');
+    updateSyncStatus(S.get('dtel_sync_ts',''));
+    setTimeout(hideProgress, 1500);
+    showToast('✅ Dados sincronizados com sucesso!');
+    populateMotSelect(); populateVeicSelect(); populateRelVeic();
+    updateBell(); checkRegAlerts();
+    if (CU?.role === 'gestor') renderAlerts();
+  } else {
+    hideProgress();
+    showToast('⚠️ Não foi possível baixar. Verifique a URL e tente novamente.', true);
+  }
+}
+
+// ── AUTO SYNC on login ────────────────────────────────────────────
+function checkAutoSync() {
+  const el  = document.getElementById('autoSync');
+  const val = S.get('dtel_autosync', false);
+  if (el) el.checked = val;
+  updateSyncStatus(S.get('dtel_sync_ts', 'nunca'));
+  if (val && S.get('dtel_webhook','')) {
+    setTimeout(async () => {
+      setProgress(20, 'Sincronizando...');
+      const ok = await S.pull();
+      if (ok) {
+        setProgress(100, 'Sincronizado!');
+        updateSyncStatus(S.get('dtel_sync_ts',''));
+        populateMotSelect(); populateVeicSelect(); populateRelVeic();
+        updateBell(); checkRegAlerts();
+        if (CU?.role === 'gestor') renderAlerts();
+        setTimeout(hideProgress, 1500);
+      } else { hideProgress(); }
+    }, 800);
+  }
+}
+
+
 let veicFotoB64 = '';
 
 function prevFotoVeiculo(input) {
@@ -1110,6 +1358,7 @@ function renderHist(){
   const fm=(document.getElementById('ftMot')?.value||'').toLowerCase();
   let all=[...regs,...lavs].sort((a,b)=>(b.ts||0)-(a.ts||0));
   if(ft==='lavagem')all=all.filter(r=>r.tipo==='lavagem'||r.tipo==='lavagem_sol_hist');
+  else if(ft==='jornada')all=all.filter(r=>r.tipo==='jornada'||r.tipo==='jornada_entrada'||r.tipo==='jornada_chegada');
   else if(ft)all=all.filter(r=>r.tipo===ft);
   if(fm)all=all.filter(r=>((r.motorista||r.motoristaNome)||'').toLowerCase().includes(fm));
   const list=document.getElementById('histList');
@@ -1135,7 +1384,7 @@ function renderHistMotorista(){
     html+='</div>';
   }
   // Jornadas
-  const jornadas=regs.filter(r=>r.tipo==='jornada');
+  const jornadas=regs.filter(r=>r.tipo==='jornada'||r.tipo==='jornada_entrada'||r.tipo==='jornada_chegada');
   if(jornadas.length){
     html+='<div class="card"><div class="slabel">🕐 Minhas Jornadas</div>';
     jornadas.forEach((r,i)=>{html+=buildRegCard(r,i+200);});
@@ -1146,8 +1395,8 @@ function renderHistMotorista(){
 }
 
 function buildRegCard(r,i){
-  const tc={vistoria:'tv',abastecimento:'ta',lavagem:'tl',lavagem_sol_hist:'tl',manutencao:'tm',jornada:'tj'};
-  const tl2={vistoria:'🔍 Vistoria',abastecimento:'⛽ Abast.',lavagem:'🚿 Lavagem',lavagem_sol_hist:'🚿 Sol. Lavagem',manutencao:'🔧 Manut.',jornada:'🕐 Jornada'};
+  const tc={vistoria:'tv',abastecimento:'ta',lavagem:'tl',lavagem_sol_hist:'tl',manutencao:'tm',jornada:'tj',jornada_entrada:'tj',jornada_chegada:'tj'};
+  const tl2={vistoria:'🔍 Vistoria',abastecimento:'⛽ Abast.',lavagem:'🚿 Lavagem',lavagem_sol_hist:'🚿 Sol. Lavagem',manutencao:'🔧 Manut.',jornada:'🕐 Jornada',jornada_entrada:'🕐 Jornada Saída',jornada_chegada:'🕐 Jornada Chegada'};
   const key='rdet-'+i+'-'+(r.ts||0);
   const dt=r.dataHora?r.dataHora.replace('T',' '):new Date(r.ts||0).toLocaleString('pt-BR');
   const mot=r.motorista||r.motoristaNome||'—';
@@ -1185,7 +1434,7 @@ function buildDet(r) {
     const obs = r.obs_geral ? '<div class="obs-block">📝 ' + h(r.obs_geral) + '</div>' : '';
     return sum + '<div class="dg">' + items + '</div>' + obs;
   }
-  if (r.tipo === 'jornada') {
+  if (r.tipo === 'jornada' || r.tipo === 'jornada_entrada' || r.tipo === 'jornada_chegada') {
     const km  = r.kmPercorrido != null ? r.kmPercorrido + ' km' : '—';
     const dur = calcDur(r.horaSaida, r.horaChegada);
     return '<div class="dg">' +
@@ -1218,6 +1467,136 @@ function calcDur(saida, chegada) {
 }
 
 // ── ALERTAS ───────────────────────────────────────────────────────
+function calcVlLitro(){
+  const lit=parseFloat(document.getElementById('litros')?.value)||0;
+  const val=parseFloat(document.getElementById('valor')?.value)||0;
+  const el=document.getElementById('vlLitro');
+  if(el&&lit>0&&val>0) el.value=(val/lit).toFixed(3);
+  else if(el) el.value='';
+}
+
+// ── PLANO DE AÇÃO ─────────────────────────────────────────────
+function abrirPlanoAcao(ncId) {
+  const ncs = S.get('dtel_nc_planos', {});
+  const p   = ncs[ncId] || {};
+  const ex  = document.getElementById('ncModal');
+  if (ex) ex.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'ncModal';
+  wrap.className = 'modal open';
+  wrap.onclick = e => { if(e.target===wrap) wrap.remove(); };
+  wrap.innerHTML = `<div class="modal-box" style="max-width:520px">
+    <div class="modal-hdr"><span>📋 Plano de Ação — NC</span><button class="modal-x" onclick="document.getElementById('ncModal').remove()">✕</button></div>
+    <div class="field"><label>Responsável pela correção</label><input id="nc_resp" value="${h(p.resp||'')}" placeholder="Nome do responsável"></div>
+    <div class="field"><label>Ação a ser realizada</label><textarea id="nc_acao" rows="3" placeholder="Descreva o que será feito...">${h(p.acao||'')}</textarea></div>
+    <div class="field"><label>Prazo para resolução</label><input id="nc_prazo" type="date" value="${h(p.prazo||'')}"></div>
+    <div class="field"><label>Status</label><select id="nc_status">
+      <option value="aberto"${(!p.status||p.status==='aberto')?' selected':''}>🔴 Aberto</option>
+      <option value="em_andamento"${p.status==='em_andamento'?' selected':''}>🟡 Em Andamento</option>
+      <option value="resolvido"${p.status==='resolvido'?' selected':''}>✅ Resolvido</option>
+    </select></div>
+    ${p.status==='resolvido'?`<div style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:10px 14px;font-size:.8rem;color:#4ade80;margin-bottom:10px">✅ Resolvido em: ${h(p.resolvidoEm||'—')}</div>`:''}
+    <button class="btn-gold" id="nc_save_btn">💾 Salvar Plano</button>
+  </div>`;
+  document.body.appendChild(wrap);
+  document.getElementById('nc_save_btn').onclick = () => salvarPlanoAcao(ncId);
+}
+
+
+function salvarPlanoAcao(ncId) {
+  const ncs = S.get('dtel_nc_planos', {});
+  const status = document.getElementById('nc_status').value;
+  const prev   = ncs[ncId] || {};
+  ncs[ncId] = {
+    resp:   document.getElementById('nc_resp').value.trim(),
+    acao:   document.getElementById('nc_acao').value.trim(),
+    prazo:  document.getElementById('nc_prazo').value,
+    status,
+    resolvidoEm: status === 'resolvido' ? (prev.resolvidoEm || new Date().toLocaleDateString('pt-BR')) : '',
+    criadoEm: prev.criadoEm || new Date().toLocaleDateString('pt-BR'),
+  };
+  S.set('dtel_nc_planos', ncs);
+  closeModal('ncModal');
+  const el = document.getElementById('ncModal');
+  if (el) el.remove();
+  renderAlerts();
+  showToast('✅ Plano de ação salvo!');
+}
+
+// ── RELATÓRIO KM ──────────────────────────────────────────────
+function renderRelatorio() {
+  const veicFil = document.getElementById('relVeic')?.value || '';
+  const per     = document.getElementById('relPer')?.value  || 'mes';
+  const regs    = S.get('dtel_reg', []);
+
+  const now = new Date();
+  const filtrarData = (ts) => {
+    if (!ts) return false;
+    const d = new Date(ts);
+    if (per === 'hoje')   return d.toDateString() === now.toDateString();
+    if (per === 'semana') { const wd=new Date(now); wd.setDate(now.getDate()-now.getDay()); return d >= wd; }
+    if (per === 'mes')    return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear();
+    return true;
+  };
+
+  // Only jornada_chegada has real km traveled
+  const jornadas = regs.filter(r =>
+    (r.tipo==='jornada_chegada' || r.tipo==='jornada') &&
+    r.kmPercorrido > 0 &&
+    filtrarData(r.ts) &&
+    (veicFil ? r.veiculo===veicFil : true)
+  );
+
+  // Group by vehicle
+  const byVeic = {};
+  jornadas.forEach(r => {
+    const v = r.veiculo || '—';
+    if (!byVeic[v]) byVeic[v] = {total:0, dias:{}};
+    byVeic[v].total += Number(r.kmPercorrido||0);
+    const dia = r.dataHora ? r.dataHora.split('T')[0] : new Date(r.ts).toISOString().split('T')[0];
+    byVeic[v].dias[dia] = (byVeic[v].dias[dia]||0) + Number(r.kmPercorrido||0);
+  });
+
+  const el = document.getElementById('relContent');
+  if (!Object.keys(byVeic).length) {
+    el.innerHTML='<div class="empty"><div class="empty-i">📊</div><div class="empty-t">Nenhuma jornada com KM no período.</div></div>';
+    return;
+  }
+
+  const periodoLabel = {hoje:'Hoje',semana:'Esta semana',mes:'Mês atual',tudo:'Todo o período'}[per]||per;
+  let html = '<div style="margin-bottom:16px;font-size:.8rem;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:1px">'+periodoLabel+'</div>';
+
+  Object.entries(byVeic).sort((a,b)=>b[1].total-a[1].total).forEach(([veic, data]) => {
+    const dias = Object.entries(data.dias).sort((a,b)=>b[0].localeCompare(a[0]));
+    html += '<div class="card" style="margin-bottom:14px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+      + '<div style="font-size:.9rem;font-weight:800;color:var(--gold)">🚗 '+h(veic)+'</div>'
+      + '<div style="font-size:1.2rem;font-weight:900;color:#4ade80">'+data.total.toLocaleString('pt-BR')+' km</div>'
+      + '</div>'
+      + '<div style="font-size:.72rem;color:rgba(255,255,255,.45);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">KM por dia</div>'
+      + dias.map(([dia,km]) => {
+          const [y,m,d2]=dia.split('-');
+          return '<div style="display:flex;justify-content:space-between;padding:6px 10px;border-radius:8px;background:rgba(255,255,255,.04);margin-bottom:4px">'
+            + '<span style="font-size:.8rem;color:rgba(255,255,255,.6)">'+d2+'/'+m+'/'+y+'</span>'
+            + '<span style="font-size:.82rem;font-weight:700;color:rgba(255,255,255,.85)">'+Number(km).toLocaleString('pt-BR')+' km</span>'
+          + '</div>';
+        }).join('')
+      + '</div>';
+  });
+
+  el.innerHTML = html;
+}
+
+function populateRelVeic() {
+  const sel = document.getElementById('relVeic'); if(!sel) return;
+  const veics = S.get('dtel_veic',[]);
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Todos os veículos</option>'
+    + veics.map(v=>'<option value="'+h(v.placa)+'">'+h(v.placa+(v.modelo?' — '+v.modelo:''))+'</option>').join('');
+  sel.value = cur;
+}
+
+
 function renderAlerts(){
   let html='';
   const lavs=S.get('dtel_lav',[]);
@@ -1255,15 +1634,29 @@ function renderAlerts(){
   const ncVists=regs.filter(r=>r.tipo==='vistoria'&&r.checklist&&Object.values(r.checklist).some(cv=>cv.status!=='ok'));
   if(ncVists.length){
     html+='<div class="card"><div class="slabel">⚠️ Vistorias com Não Conformidade</div>';
+    const planos=S.get('dtel_nc_planos',{});
     ncVists.slice(0,10).forEach(r=>{
       const ncs=getCL().filter(it=>r.checklist[it.id]&&r.checklist[it.id].status!=='ok');
-      html+='<div style="background:rgba(249,115,22,.05);border:1.5px solid rgba(249,115,22,.25);border-radius:13px;padding:11px 14px;margin-bottom:9px;display:flex;align-items:flex-start;gap:10px">'
+      const ncId='nc_'+r.ts;
+      const plano=planos[ncId]||null;
+      const stCor={aberto:'rgba(239,68,68,.15)',em_andamento:'rgba(251,191,36,.15)',resolvido:'rgba(34,197,94,.1)'}[plano?.status]||'rgba(249,115,22,.05)';
+      const stBor={aberto:'rgba(239,68,68,.4)',em_andamento:'rgba(251,191,36,.35)',resolvido:'rgba(34,197,94,.35)'}[plano?.status]||'rgba(249,115,22,.25)';
+      const stLabel={aberto:'🔴 Aberto',em_andamento:'🟡 Em Andamento',resolvido:'✅ Resolvido'}[plano?.status]||'⚪ Sem plano';
+      html+='<div style="background:'+stCor+';border:1.5px solid '+stBor+';border-radius:13px;padding:11px 14px;margin-bottom:9px">'
+        +'<div style="display:flex;align-items:flex-start;gap:10px">'
         +'<div style="font-size:1.3rem;flex-shrink:0">⚠️</div>'
         +'<div style="flex:1"><div style="font-weight:800;font-size:.87rem;color:white">'+h(r.veiculo)+'<span style="font-size:.75rem;color:rgba(255,255,255,.5);font-weight:600"> — '+h(r.motorista)+'</span></div>'
         +'<div style="font-size:.75rem;color:#fdba74;margin-top:3px;font-weight:700">'+ncs.length+' item(ns) com problema</div>'
         +'<div style="font-size:.73rem;color:rgba(255,255,255,.5);margin-top:2px">'+ncs.map(it=>it.icon+' '+h(it.name)).join(' · ')+'</div>'
         +'<div style="font-size:.7rem;color:rgba(255,255,255,.3);margin-top:3px">'+fd2(r.ts)+'</div></div>'
         +'<span class="cnh-pill cnh-att">NC: '+ncs.length+'</span>'
+        +'</div>'
+        // Plano de ação section
+        +'<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'
+        +'<div style="font-size:.75rem;color:rgba(255,255,255,.5)">Plano de Ação: <strong style="color:'+(plano?.status==='resolvido'?'#4ade80':plano?.status?'#fbbf24':'rgba(255,255,255,.4)')+'">'+stLabel+'</strong>'+(plano?.resp?'<span style="margin-left:6px;color:rgba(255,255,255,.4)">· '+h(plano.resp)+'</span>':'')+(plano?.prazo?'<span style="margin-left:6px;color:rgba(255,255,255,.35)">· Prazo: '+fd(plano.prazo)+'</span>':'')+'</div>'
+        +'<button onclick="abrirPlanoAcao(\''+ncId+'\')" style="font-size:.73rem;padding:5px 12px;border-radius:8px;border:1.5px solid '+(plano?.status==='resolvido'?'rgba(34,197,94,.4)':'rgba(245,197,24,.4)')+';background:'+(plano?.status==='resolvido'?'rgba(34,197,94,.1)':'rgba(245,197,24,.07)')+';color:'+(plano?.status==='resolvido'?'#4ade80':'var(--gold)')+';cursor:pointer;font-weight:700">'+(plano?'✏️ Editar Plano':'➕ Criar Plano')+'</button>'
+        +'</div>'
+        +(plano?.acao?'<div style="margin-top:6px;font-size:.73rem;color:rgba(255,255,255,.5);font-style:italic;padding:6px 10px;background:rgba(255,255,255,.04);border-radius:8px">'+h(plano.acao)+'</div>':'')
       +'</div>';
     });
     html+='</div>';
