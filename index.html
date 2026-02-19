@@ -238,6 +238,7 @@ input::placeholder{color:rgba(255,255,255,.26);}
     <div class="lf"><label>Senha</label><div style="position:relative;display:flex;align-items:center;"><input id="loginPass" type="password" placeholder="Digite sua senha" autocomplete="current-password" autocorrect="off" autocapitalize="none" spellcheck="false" onkeydown="if(event.key==='Enter')doLogin()" style="flex:1;padding-right:44px"><button type="button" onclick="var i=document.getElementById('loginPass');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'" style="position:absolute;right:6px;background:none;border:none;cursor:pointer;font-size:1.1rem;padding:4px;color:rgba(255,255,255,.6)">👁</button></div></div>
     <div id="loginError"></div>
     <button class="btn-login" onclick="doLogin()">🔐 ENTRAR</button>
+    <button onclick="resetEmergencia()" style="margin-top:10px;width:100%;padding:10px;background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:10px;color:rgba(255,255,255,.4);font-size:.75rem;cursor:pointer">🔁 Problema no login? Clique aqui para resetar</button>
   </div>
 </div>
 
@@ -533,7 +534,7 @@ const LOGO_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAKoAAAB4CAYAAABigGmmAAAdRklEQVR42u19e5
 // ── JSONBIN.IO — Sincronização em tempo real ──────────────────────
 const JBIN = {
   ID:  '69977cd7ae596e708f384128',
-  KEY: '$2a$10$1iLQ1tcQc9ddNvCbbXrSAeKQqf31tvEg05ibDajHx9/w3NphhPhv.',
+  KEY: '$2a$10$8i8kr/4ptfuedErNbtdChuukzY/LFn07k1PyqFpa5ZibZlv8siaWq',
   URL: 'https://api.jsonbin.io/v3/b/69977cd7ae596e708f384128',
   headers() {
     return {
@@ -699,10 +700,17 @@ function saveCL(a){ S.set('dtel_cl', a); }
 // ── INIT ─────────────────────────────────────────────────────────
 async function initDefaults() {
   let temDadosNuvem = false;
+  const dbg = (msg) => {
+    const el = document.getElementById('loginError');
+    if (el) el.textContent = msg;
+    console.log('[DTEL]', msg);
+  };
   try {
+    dbg('🔄 Conectando ao JSONBin...');
     const remoto = await JBIN.fetch();
+    console.log('[DTEL] JSONBin retornou:', JSON.stringify(remoto).slice(0,200));
     if (remoto && remoto.dtel_master) {
-      // JSONBin tem dados reais — aplica tudo localmente
+      dbg('✅ Dados da nuvem recebidos!');
       localStorage.setItem('dtel_master',    JSON.stringify(remoto.dtel_master));
       localStorage.setItem('dtel_maccs',     JSON.stringify(remoto.dtel_maccs     || []));
       localStorage.setItem('dtel_mot',       JSON.stringify(remoto.dtel_mot       || []));
@@ -713,10 +721,16 @@ async function initDefaults() {
       localStorage.setItem('dtel_nc_planos', JSON.stringify(remoto.dtel_nc_planos || {}));
       localStorage.setItem('dtel_lav_hist',  JSON.stringify(remoto.dtel_lav_hist  || []));
       temDadosNuvem = true;
+    } else {
+      dbg('⚠️ JSONBin sem dados — usando padrões locais');
+      console.log('[DTEL] remoto.dtel_master ausente. remoto=', remoto);
     }
-  } catch(e) { /* sem conexão — usa o que tiver no localStorage */ }
+  } catch(e) {
+    dbg('⚠️ Sem conexão — usando dados locais');
+    console.log('[DTEL] Erro ao buscar JSONBin:', e.message);
+  }
 
-  // Garante sempre que os campos essenciais existam (fallback seguro)
+  // Garante sempre que os campos essenciais existam
   if (!S.get('dtel_master', null))    localStorage.setItem('dtel_master',    JSON.stringify({login:'admin', pass:'admin123'}));
   if (!S.get('dtel_maccs',  null))    localStorage.setItem('dtel_maccs',     JSON.stringify([]));
   if (!S.get('dtel_mot',    null))    localStorage.setItem('dtel_mot',       JSON.stringify([]));
@@ -724,6 +738,8 @@ async function initDefaults() {
   if (!S.get('dtel_reg',    null))    localStorage.setItem('dtel_reg',       JSON.stringify([]));
   if (!S.get('dtel_lav',    null))    localStorage.setItem('dtel_lav',       JSON.stringify([]));
   if (!S.get('dtel_nc_planos', null)) localStorage.setItem('dtel_nc_planos', JSON.stringify({}));
+
+  console.log('[DTEL] dtel_master após init:', JSON.stringify(S.get('dtel_master', null)));
 
   const src = 'data:image/png;base64,' + LOGO_B64;
   document.getElementById('loginLogoImg').src  = src;
@@ -1979,6 +1995,16 @@ function respLav(id, aprovar){
 function respLavEl(el, aprovar){
   const id=el.closest('[data-lavid]').dataset.lavid;
   respLav(id, aprovar);
+}
+
+function resetEmergencia() {
+  if (!confirm('Isso vai limpar os dados locais e recarregar do JSONBin.\nUse só se o login estiver bloqueado.\n\nContinuar?')) return;
+  // Limpa localStorage completamente
+  const keysToRemove = ['dtel_master','dtel_maccs','dtel_mot','dtel_veic','dtel_reg',
+                         'dtel_lav','dtel_cl','dtel_nc_planos','dtel_lav_hist','dtel_sync_ts'];
+  keysToRemove.forEach(k => localStorage.removeItem(k));
+  // Recarrega a página — initDefaults vai buscar tudo do JSONBin
+  location.reload();
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────
