@@ -615,7 +615,7 @@ const S = {
   async pull() {
     try {
       const p = await JBIN.fetch();
-      if (!p || !p._ts) return false;   // bin vazio / sem dados reais
+      if (!p || !p.dtel_master) return false;  // bin vazio ou sem dados reais
 
       const mergeArr = (local, remote, key='ts') => {
         const map = {};
@@ -698,34 +698,32 @@ function saveCL(a){ S.set('dtel_cl', a); }
 
 // ── INIT ─────────────────────────────────────────────────────────
 async function initDefaults() {
-  // Primeiro tenta baixar do JSONBin
-  // Se tiver dados reais lá, usa eles — não sobrescreve com padrões
   let temDadosNuvem = false;
   try {
     const remoto = await JBIN.fetch();
-    if (remoto && remoto._ts) {
-      // JSONBin tem dados — aplica tudo localmente
-      if (remoto.dtel_master)    localStorage.setItem('dtel_master',    JSON.stringify(remoto.dtel_master));
-      if (remoto.dtel_maccs)     localStorage.setItem('dtel_maccs',     JSON.stringify(remoto.dtel_maccs));
-      if (remoto.dtel_mot)       localStorage.setItem('dtel_mot',       JSON.stringify(remoto.dtel_mot));
-      if (remoto.dtel_veic)      localStorage.setItem('dtel_veic',      JSON.stringify(remoto.dtel_veic));
-      if (remoto.dtel_reg)       localStorage.setItem('dtel_reg',       JSON.stringify(remoto.dtel_reg));
-      if (remoto.dtel_lav)       localStorage.setItem('dtel_lav',       JSON.stringify(remoto.dtel_lav));
-      if (remoto.dtel_cl)        localStorage.setItem('dtel_cl',        JSON.stringify(remoto.dtel_cl));
-      if (remoto.dtel_nc_planos) localStorage.setItem('dtel_nc_planos', JSON.stringify(remoto.dtel_nc_planos));
+    if (remoto && remoto.dtel_master) {
+      // JSONBin tem dados reais — aplica tudo localmente
+      localStorage.setItem('dtel_master',    JSON.stringify(remoto.dtel_master));
+      localStorage.setItem('dtel_maccs',     JSON.stringify(remoto.dtel_maccs     || []));
+      localStorage.setItem('dtel_mot',       JSON.stringify(remoto.dtel_mot       || []));
+      localStorage.setItem('dtel_veic',      JSON.stringify(remoto.dtel_veic      || []));
+      localStorage.setItem('dtel_reg',       JSON.stringify(remoto.dtel_reg       || []));
+      localStorage.setItem('dtel_lav',       JSON.stringify(remoto.dtel_lav       || []));
+      localStorage.setItem('dtel_cl',        JSON.stringify(remoto.dtel_cl        || []));
+      localStorage.setItem('dtel_nc_planos', JSON.stringify(remoto.dtel_nc_planos || {}));
+      localStorage.setItem('dtel_lav_hist',  JSON.stringify(remoto.dtel_lav_hist  || []));
       temDadosNuvem = true;
     }
-  } catch(e) { /* sem conexão — usa localStorage */ }
+  } catch(e) { /* sem conexão — usa o que tiver no localStorage */ }
 
-  // Só define padrões se não tiver nada local E nem na nuvem
-  if (!temDadosNuvem) {
-    if (!S.get('dtel_master', null))    localStorage.setItem('dtel_master',    JSON.stringify({login:'admin', pass:'admin123'}));
-    if (!S.get('dtel_maccs',  null))    localStorage.setItem('dtel_maccs',     JSON.stringify([]));
-    if (!S.get('dtel_mot',    null))    localStorage.setItem('dtel_mot',       JSON.stringify([]));
-    if (!S.get('dtel_veic',   null))    localStorage.setItem('dtel_veic',      JSON.stringify([]));
-    if (!S.get('dtel_reg',    null))    localStorage.setItem('dtel_reg',       JSON.stringify([]));
-    if (!S.get('dtel_nc_planos', null)) localStorage.setItem('dtel_nc_planos', JSON.stringify({}));
-  }
+  // Garante sempre que os campos essenciais existam (fallback seguro)
+  if (!S.get('dtel_master', null))    localStorage.setItem('dtel_master',    JSON.stringify({login:'admin', pass:'admin123'}));
+  if (!S.get('dtel_maccs',  null))    localStorage.setItem('dtel_maccs',     JSON.stringify([]));
+  if (!S.get('dtel_mot',    null))    localStorage.setItem('dtel_mot',       JSON.stringify([]));
+  if (!S.get('dtel_veic',   null))    localStorage.setItem('dtel_veic',      JSON.stringify([]));
+  if (!S.get('dtel_reg',    null))    localStorage.setItem('dtel_reg',       JSON.stringify([]));
+  if (!S.get('dtel_lav',    null))    localStorage.setItem('dtel_lav',       JSON.stringify([]));
+  if (!S.get('dtel_nc_planos', null)) localStorage.setItem('dtel_nc_planos', JSON.stringify({}));
 
   const src = 'data:image/png;base64,' + LOGO_B64;
   document.getElementById('loginLogoImg').src  = src;
@@ -766,6 +764,13 @@ async function doLogin() {
   ['appBar','appNav','appMain'].forEach(id => {
     document.getElementById(id).style.display = id === 'appMain' ? 'block' : 'flex';
   });
+  // Se o JSONBin ainda não tem dados reais, envia agora para inicializá-lo
+  try {
+    const remoto = await JBIN.fetch();
+    if (!remoto || !remoto.dtel_master) {
+      await JBIN.save(S._snapshot());
+    }
+  } catch(e) {}
   launchApp();
 }
 
