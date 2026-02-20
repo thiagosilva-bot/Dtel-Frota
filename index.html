@@ -732,38 +732,40 @@ function saveCL(a){ S.set('dtel_cl', a); }
 
 // ── INIT ─────────────────────────────────────────────────────────
 async function initDefaults() {
-  let temDadosNuvem = false;
   const dbg = (msg) => {
     const el = document.getElementById('loginError');
     if (el) el.textContent = msg;
     console.log('[DTEL]', msg);
   };
+
   try {
     dbg('🔄 Conectando ao Firebase...');
-    const remoto = await JBIN.fetch();
-    console.log('[DTEL] Firebase retornou:', JSON.stringify(remoto).slice(0,200));
+    const snap = await FB_DOC.get();
+    const remoto = snap.exists ? snap.data() : null;
+    console.log('[DTEL] Firebase:', remoto ? 'dados OK' : 'vazio');
+
     if (remoto && remoto.dtel_master) {
-      dbg('✅ Dados da nuvem recebidos!');
+      dbg('✅ Dados recebidos!');
+      // Firebase é a fonte de verdade — sempre sobrescreve o localStorage
       localStorage.setItem('dtel_master',    JSON.stringify(remoto.dtel_master));
       localStorage.setItem('dtel_maccs',     JSON.stringify(remoto.dtel_maccs     || []));
       localStorage.setItem('dtel_mot',       JSON.stringify(remoto.dtel_mot       || []));
       localStorage.setItem('dtel_veic',      JSON.stringify(remoto.dtel_veic      || []));
       localStorage.setItem('dtel_reg',       JSON.stringify(remoto.dtel_reg       || []));
       localStorage.setItem('dtel_lav',       JSON.stringify(remoto.dtel_lav       || []));
-      if (remoto.dtel_cl && remoto.dtel_cl.length > 0) localStorage.setItem('dtel_cl', JSON.stringify(remoto.dtel_cl));
       localStorage.setItem('dtel_nc_planos', JSON.stringify(remoto.dtel_nc_planos || {}));
       localStorage.setItem('dtel_lav_hist',  JSON.stringify(remoto.dtel_lav_hist  || []));
-      temDadosNuvem = true;
+      if (remoto.dtel_cl && remoto.dtel_cl.length > 0)
+        localStorage.setItem('dtel_cl', JSON.stringify(remoto.dtel_cl));
     } else {
-      dbg('⚠️ Firebase sem dados — usando padrões locais');
-      console.log('[DTEL] remoto.dtel_master ausente. remoto=', remoto);
+      dbg('⚠️ Firebase vazio — usando padrões');
     }
   } catch(e) {
-    dbg('⚠️ Sem conexão — usando dados locais');
-    console.log('[DTEL] Erro ao buscar Firebase:', e.message);
+    dbg('⚠️ Sem conexão — usando cache local');
+    console.log('[DTEL] Erro Firebase:', e.message);
   }
 
-  // Garante sempre que os campos essenciais existam
+  // Fallback: garante campos essenciais se Firebase estiver vazio ou offline
   if (!S.get('dtel_master', null))    localStorage.setItem('dtel_master',    JSON.stringify({login:'admin', pass:'admin123'}));
   if (!S.get('dtel_maccs',  null))    localStorage.setItem('dtel_maccs',     JSON.stringify([]));
   if (!S.get('dtel_mot',    null))    localStorage.setItem('dtel_mot',       JSON.stringify([]));
@@ -772,7 +774,7 @@ async function initDefaults() {
   if (!S.get('dtel_lav',    null))    localStorage.setItem('dtel_lav',       JSON.stringify([]));
   if (!S.get('dtel_nc_planos', null)) localStorage.setItem('dtel_nc_planos', JSON.stringify({}));
 
-  console.log('[DTEL] dtel_master após init:', JSON.stringify(S.get('dtel_master', null)));
+  console.log('[DTEL] master final:', JSON.stringify(S.get('dtel_master', null)));
 
   const src = 'data:image/png;base64,' + LOGO_B64;
   document.getElementById('loginLogoImg').src  = src;
@@ -815,9 +817,9 @@ async function doLogin() {
   });
   // Se o Firebase ainda não tem dados reais, envia agora para inicializá-lo
   try {
-    const remoto = await JBIN.fetch();
-    if (!remoto || !remoto.dtel_master) {
-      await JBIN.save(S._snapshot());
+    const snap = await FB_DOC.get();
+    if (!snap.exists || !snap.data()?.dtel_master) {
+      await FB_DOC.set(S._snapshot());
     }
   } catch(e) {}
   launchApp();
